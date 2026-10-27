@@ -1,0 +1,24 @@
+[Unit]
+Description=keymask acoustic keystroke masker
+After=sound.target
+Wants=sound.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/keymask
+Environment=KEYMASK_CONFIG=/opt/keymask/config.yaml
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m keymask run
+Restart=on-failure
+RestartSec=3
+# audio thread deserves priority on an old Pi
+Nice=-10
+# run as the user created by scripts/install.sh (in groups audio, gpio)
+User=keymask
+Group=keymask
+SupplementaryGroups=audio gpio
+LogsDirectory=keymask
+StateDirectory=keymask
+
+[Install]
+WantedBy=multi-user.target

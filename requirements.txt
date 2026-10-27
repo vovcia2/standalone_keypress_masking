@@ -1,0 +1,7 @@
+# Runtime (Pi). Install with: sudo apt install python3-numpy python3-yaml libportaudio2
+# then: pip3 install -r requirements.txt
+numpy>=1.19
+PyYAML>=5.3
+sounddevice>=0.4   # PortAudio binding; falls back to pyalsaaudio if unstable
+pyalsaaudio>=0.9   # optional fallback backend (apt: python3-alsaaudio)
+gpiozero>=1.6      # HAT button/LED (apt: python3-gpiozero)

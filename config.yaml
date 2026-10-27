@@ -1,0 +1,54 @@
+# keymask configuration
+#
+# Values marked "fill in from bring-up" come from scripts/bringup.sh on the Pi.
+# Everything timing-related is expressed in milliseconds or seconds here and
+# converted to SAMPLES at load time (keymask/config.py). The running system
+# never consults the wall clock for audio decisions.
+
+audio:
+  device: "hw:1,0"        # fill in from bring-up (arecord -l / aplay -l)
+  rate: 48000             # fill in from bring-up (--dump-hw-params)
+  blocksize: 512          # smallest value that runs without xruns (see CHECKLIST)
+  input_channel: 0        # 0 = left I2S mic
+  dtype: "int16"          # S16_LE; use "int32" if the card only offers S32_LE
+  backend: "auto"         # auto | sounddevice | alsa  (see README "Audio backend")
+  ring_seconds: 1.0       # detector ring buffer length
+  output_gain: 0.7        # master gain applied to the decoy mix (0..1)
+
+detector:
+  band_hz: [2000, 10000]  # keystroke energy band
+  frame_ms: 2.5           # short-frame energy window
+  onset_db: 15            # rise above background that triggers
+  rise_ms: 5              # rise must happen within this window
+  refractory_ms: 30       # ignore further triggers for this long
+  background_tau_s: 0.5   # time constant of the slow background tracker
+  settle_s: 1.5           # hard-ignore triggers until the background settled
+  blank_margin_ms: 5      # self-blank window starts this much before expected arrival
+  blank_tail_ms: 80       # room reverb tail appended to each blank window
+
+scheduler:
+  idle_rate_hz: 0.1       # background decoys while IDLE (0 disables)
+  active_rate_hz: 7.0     # Poisson rate while ACTIVE; must be >= typing rate
+  hold_range_s: [2.0, 5.0]
+  taper_range_s: [2.0, 4.0]
+  gain_jitter_db: 4.0     # random per-decoy gain in +/- this range
+
+decoys:
+  dir: "decoys"
+  min_clips_warn: 300     # warn at startup below this many clips
+  peak_norm: 0.5          # common peak after normalisation (full scale = 1.0)
+
+calibration:
+  loop_latency_samples: null   # filled by `python -m keymask calibrate`
+  decoy_level_at_mic_dbfs: null
+  keystroke_level_at_mic_dbfs: null
+
+hat:
+  button_gpio: 23
+  led_gpio: 25
+  long_press_s: 3.0
+
+logging:
+  path: "/var/log/keymask/keymask.jsonl"   # falls back to ./keymask.jsonl if not writable
+  cpu_interval_s: 10
+  stdout: true
