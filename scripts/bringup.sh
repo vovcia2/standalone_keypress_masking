@@ -32,25 +32,37 @@ echo "   -> use   audio.device: \"$DEV\"   in config.yaml"
 
 echo
 echo "== 3. Supported hw params (capture)"
-# --dump-hw-params prints the card's capabilities and then fails on purpose
-# (we ask for an impossible rate), so no audio is actually moved here.
-CAP=$(arecord --dump-hw-params -D "$DEV" -d 1 -r 1 /dev/null 2>&1)
-echo "$CAP" | grep -E 'FORMAT|RATE|CHANNELS|PERIOD_SIZE|BUFFER_SIZE' | sed 's/^/   /'
+# --dump-hw-params prints the card's capabilities before trying to configure
+# it. We ask for a 1 s run at 48 kHz; if the requested format is unsupported
+# arecord/aplay exit with "Sample format non available" and a list of what
+# IS available, which we also parse. Either way nothing useful is recorded.
+CAP=$(arecord --dump-hw-params -D "$DEV" -d 1 -r 48000 -c 2 -f S16_LE /dev/null 2>&1)
+echo "$CAP" | grep -E 'FORMAT|RATE|CHANNELS|PERIOD_SIZE|BUFFER_SIZE|Available|^ *- S' | sed 's/^/   /'
 echo "== 3. Supported hw params (playback)"
-PB=$(aplay --dump-hw-params -D "$DEV" -d 1 -r 1 -c 2 /dev/zero 2>&1)
-echo "$PB" | grep -E 'FORMAT|RATE|CHANNELS|PERIOD_SIZE|BUFFER_SIZE' | sed 's/^/   /'
+PB=$(aplay --dump-hw-params -D "$DEV" -d 1 -r 48000 -c 2 -f S16_LE /dev/zero 2>&1)
+echo "$PB" | grep -E 'FORMAT|RATE|CHANNELS|PERIOD_SIZE|BUFFER_SIZE|Available|^ *- S' | sed 's/^/   /'
 
 # Pick a format both directions support: S16_LE preferred, else S32_LE.
-CAP_FMTS=$(echo "$CAP" | sed -n 's/^FORMAT: *//p')
-PB_FMTS=$(echo "$PB" | sed -n 's/^FORMAT: *//p')
+# Tokens come from the "FORMAT:" line of the dump and/or the "Available
+# formats" error list, whichever the tool printed.
+CAP_FMTS=$(echo "$CAP" | grep -oE 'S(16|24|32)_LE' | sort -u | tr '\n' ' ')
+PB_FMTS=$(echo "$PB" | grep -oE 'S(16|24|32)_LE' | sort -u | tr '\n' ' ')
+echo "   capture formats:  ${CAP_FMTS:-<none parsed>}"
+echo "   playback formats: ${PB_FMTS:-<none parsed>}"
 FMT=""
 for f in S16_LE S32_LE S24_LE; do
   if echo "$CAP_FMTS" | grep -qw "$f" && echo "$PB_FMTS" | grep -qw "$f"; then FMT=$f; break; fi
 done
 if [ -z "$FMT" ]; then
-  # fall back to whatever capture offers (the ICS-43432 mics are 32-bit I2S)
+  if [ -z "$CAP_FMTS" ] || [ -z "$PB_FMTS" ]; then
+    echo "   Could not parse the formats. Full output follows; STOP and report."
+    echo "$CAP" | sed 's/^/   | /'; echo "$PB" | sed 's/^/   | /'
+    exit 3
+  fi
+  # fall back to whatever capture offers (the ICS-43432 mics are 32-bit I2S);
+  # the loopback in step 4 will tell us if playback really cannot take it.
   FMT=$(echo "$CAP_FMTS" | awk '{print $1}')
-  echo "   NOTE: no common format found; using capture format $FMT"
+  echo "   NOTE: no common format found; trying capture format $FMT"
 fi
 case "$FMT" in
   S16_LE) DTYPE=int16 ;;
