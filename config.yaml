@@ -10,7 +10,7 @@ audio:
   rate: 48000             # fill in from bring-up (--dump-hw-params)
   blocksize: 512          # smallest value that runs without xruns (see CHECKLIST)
   input_channel: 0        # 0 = left I2S mic
-  dtype: "int16"          # S16_LE; use "int32" if the card only offers S32_LE
+  dtype: "int32"          # the HAT's I2S mics only offer S32_LE (bring-up 2026-10-27); "int16" if your card has S16_LE
   backend: "auto"         # auto | sounddevice | alsa  (see README "Audio backend")
   ring_seconds: 1.0       # detector ring buffer length
   output_gain: 0.7        # master gain applied to the decoy mix (0..1)

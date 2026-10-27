@@ -75,10 +75,11 @@ bash scripts/bringup.sh
 It checks `dtoverlay=googlevoicehat-soundcard` in `/boot/config.txt` or
 `/boot/firmware/config.txt` (and warns if the on-board `dtparam=audio=on`
 is also enabled), finds the card via `arecord -l` / `aplay -l`, dumps the
-supported hw params for both directions, runs a 5 s `arecord | aplay`
-full-duplex loopback, and probes the Python backends. Copy the device string
-and rate it prints into `config.yaml` (`audio.device`, `audio.rate`,
-`audio.dtype`). **If the loopback fails with "Device or resource busy", the
+supported hw params for both directions, picks a sample format both sides
+support (the HAT's ICS-43432 mics are 32-bit only, so expect `S32_LE` →
+`audio.dtype: "int32"`), runs a 5 s `arecord | aplay` full-duplex loopback
+in that format, and probes the Python backends. Copy the device string,
+rate and dtype it prints into `config.yaml`. **If the loopback fails with "Device or resource busy", the
 driver cannot do simultaneous capture+playback; stop and report — do not work
 around it.**
 

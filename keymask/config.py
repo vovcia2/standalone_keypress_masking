@@ -24,7 +24,7 @@ DEFAULTS: Dict[str, Any] = {
         "rate": 48000,
         "blocksize": 512,
         "input_channel": 0,
-        "dtype": "int16",
+        "dtype": "int32",  # AIY Voice HAT mics are S32_LE only
         "backend": "auto",
         "ring_seconds": 1.0,
         "output_gain": 0.7,

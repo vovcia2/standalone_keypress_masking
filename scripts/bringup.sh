@@ -32,17 +32,42 @@ echo "   -> use   audio.device: \"$DEV\"   in config.yaml"
 
 echo
 echo "== 3. Supported hw params (capture)"
-arecord --dump-hw-params -D "$DEV" -d 1 -f S16_LE -r 48000 /dev/null 2>&1 | grep -E 'FORMAT|RATE|CHANNELS|PERIOD_SIZE|BUFFER_SIZE' | sed 's/^/   /'
+# --dump-hw-params prints the card's capabilities and then fails on purpose
+# (we ask for an impossible rate), so no audio is actually moved here.
+CAP=$(arecord --dump-hw-params -D "$DEV" -d 1 -r 1 /dev/null 2>&1)
+echo "$CAP" | grep -E 'FORMAT|RATE|CHANNELS|PERIOD_SIZE|BUFFER_SIZE' | sed 's/^/   /'
 echo "== 3. Supported hw params (playback)"
-aplay --dump-hw-params -D "$DEV" /dev/zero -d 1 -f S16_LE -r 48000 -c 2 2>&1 | grep -E 'FORMAT|RATE|CHANNELS|PERIOD_SIZE|BUFFER_SIZE' | sed 's/^/   /'
-echo "   -> pick the highest rate listed by BOTH (expect 48000) and a format both support"
-echo "      (S16_LE preferred, else S32_LE -> audio.dtype: int32). Put them in config.yaml."
+PB=$(aplay --dump-hw-params -D "$DEV" -d 1 -r 1 -c 2 /dev/zero 2>&1)
+echo "$PB" | grep -E 'FORMAT|RATE|CHANNELS|PERIOD_SIZE|BUFFER_SIZE' | sed 's/^/   /'
+
+# Pick a format both directions support: S16_LE preferred, else S32_LE.
+CAP_FMTS=$(echo "$CAP" | sed -n 's/^FORMAT: *//p')
+PB_FMTS=$(echo "$PB" | sed -n 's/^FORMAT: *//p')
+FMT=""
+for f in S16_LE S32_LE S24_LE; do
+  if echo "$CAP_FMTS" | grep -qw "$f" && echo "$PB_FMTS" | grep -qw "$f"; then FMT=$f; break; fi
+done
+if [ -z "$FMT" ]; then
+  # fall back to whatever capture offers (the ICS-43432 mics are 32-bit I2S)
+  FMT=$(echo "$CAP_FMTS" | awk '{print $1}')
+  echo "   NOTE: no common format found; using capture format $FMT"
+fi
+case "$FMT" in
+  S16_LE) DTYPE=int16 ;;
+  S32_LE) DTYPE=int32 ;;
+  *) echo "   format $FMT is not supported by keymask (needs S16_LE or S32_LE); STOP and report"; exit 3 ;;
+esac
+RATE=48000
+if ! echo "$CAP" | grep -E '^RATE' | grep -q 48000; then
+  echo "   WARNING: capture does not list 48000 Hz; check the RATE line above and set audio.rate"
+fi
+echo "   -> use   audio.rate: $RATE   audio.dtype: \"$DTYPE\"   ($FMT)   in config.yaml"
 
 echo
-echo "== 4. Full-duplex proof (5 s loopback: mic -> speaker). Tap near the mic and listen."
+echo "== 4. Full-duplex proof (5 s loopback: mic -> speaker, $FMT @ $RATE). Tap near the mic and listen."
 echo "   If this fails with 'Device or resource busy' the driver cannot do simultaneous"
 echo "   capture+playback on one card. STOP and report; do not work around it."
-arecord -D "$DEV" -f S16_LE -r 48000 -c 2 -d 5 2>/tmp/keymask_rec.err | aplay -D "$DEV" -f S16_LE -r 48000 -c 2 2>/tmp/keymask_play.err
+arecord -D "$DEV" -f "$FMT" -r "$RATE" -c 2 -d 5 2>/tmp/keymask_rec.err | aplay -D "$DEV" -f "$FMT" -r "$RATE" -c 2 2>/tmp/keymask_play.err
 RC=$?
 if [ $RC -eq 0 ] && ! grep -qi 'busy\|error' /tmp/keymask_rec.err /tmp/keymask_play.err; then
   echo "   OK: full duplex ran for 5 s"
@@ -76,4 +101,8 @@ except Exception as e:
 EOF
 
 echo
-echo "== Done. Next: python3 -m keymask duplex-test   (measures the smallest stable blocksize)"
+echo "== Done. Put these in config.yaml:"
+echo "     audio.device: \"$DEV\""
+echo "     audio.rate: $RATE"
+echo "     audio.dtype: \"$DTYPE\""
+echo "   Next: python3 -m keymask duplex-test   (measures the smallest stable blocksize)"
